@@ -11,6 +11,8 @@ import asyncio
 
 # --- Настройка Telegram ---
 TELEGRAM_TOKEN = "8395846968:AAGtrBhr5N9SGgEayzd5SxlJznrfcU_UQwk"
+import datetime
+print("Current UTC time:", datetime.datetime.utcnow())
 
 # --- Авторизация в Google Sheets ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
