@@ -8,15 +8,16 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import StateFilter
 import asyncio
+import os
+import json
 
 # --- Настройка Telegram ---
 TELEGRAM_TOKEN = "8395846968:AAGtrBhr5N9SGgEayzd5SxlJznrfcU_UQwk"
-import datetime
-print("Current UTC time:", datetime.datetime.utcnow())
 
-# --- Авторизация в Google Sheets ---
+
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+creds_dict = json.loads(os.getenv('GOOGLE_CREDENTIALS_JSON'))
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 gc = gspread.authorize(creds)
 
 SHEET_NAME = 'BonusPointsBot'
