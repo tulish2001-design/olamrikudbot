@@ -1,4 +1,3 @@
-
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from aiogram import Bot, Dispatcher, Router
@@ -10,11 +9,12 @@ from aiogram.filters import StateFilter
 import asyncio
 import os
 import json
+from aiohttp import web
 
 # --- Настройка Telegram ---
 TELEGRAM_TOKEN = "8395846968:AAGtrBhr5N9SGgEayzd5SxlJznrfcU_UQwk"
 
-
+# --- Авторизация в Google Sheets ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds_dict = json.loads(os.getenv('GOOGLE_CREDENTIALS_JSON'))
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -29,12 +29,10 @@ bot = Bot(token=TELEGRAM_TOKEN)
 dp = Dispatcher()
 router = Router()
 
-
 # --- FSM состояния ---
 class Registration(StatesGroup):
     choosing_language = State()
     waiting_for_name = State()
-
 
 # --- Хранилище выбора языка ---
 user_lang = {}
@@ -47,7 +45,6 @@ def get_texts(user_id: str):
     else:
         import text_ru as texts
     return texts
-
 
 # =================================
 # 1. START — регистрация
@@ -66,7 +63,6 @@ async def cmd_start(message: Message, state: FSMContext):
     await message.answer("Izvēlies valodu: 🇷🇺 Krievu vai 🇱🇻 Latviešu", reply_markup=kb)
     await state.set_state(Registration.choosing_language)
 
-
 @router.message(Registration.choosing_language)
 async def choose_language_start(message: Message, state: FSMContext):
     user_id = str(message.from_user.id)
@@ -79,22 +75,16 @@ async def choose_language_start(message: Message, state: FSMContext):
         await message.answer("Please, choose language / Lūdzu, izvēlieties valodu")
         return
 
-    # проверяем таблицу
     users = users_sheet.get_all_records()
     user = next((u for u in users if str(u.get("TelegramID")) == user_id), None)
-
     texts = get_texts(user_id)
 
     if user:
-        # если юзер найден → говорим что уже зарегистрирован
-        await message.answer(texts.messages["already_registered"] + "\n\n" + texts.messages["help"],
-                             reply_markup=None)
+        await message.answer(texts.messages["already_registered"] + "\n\n" + texts.messages["help"], reply_markup=None)
         await state.clear()
     else:
-        # если новый → просим ввести имя
         await message.answer(texts.messages["ask_name"], reply_markup=None)
         await state.set_state(Registration.waiting_for_name)
-
 
 @router.message(Registration.waiting_for_name)
 async def save_user_name(message: Message, state: FSMContext):
@@ -115,7 +105,6 @@ async def save_user_name(message: Message, state: FSMContext):
 
     lang = user_lang.get(user_id, "ru")
 
-    # 👉 теперь текст тоже из файла
     await message.answer(texts.messages["ask_parent"])
     await state.update_data(name=name, surname=surname, lang=lang)
     await state.set_state("waiting_for_parent")
@@ -141,7 +130,6 @@ async def save_parent(message: Message, state: FSMContext):
     await message.answer(texts.messages["help"])
     await state.clear()
 
-
 # =================================
 # 2. VALODA — смена языка без регистрации
 # =================================
@@ -158,7 +146,6 @@ async def cmd_language(message: Message, state: FSMContext):
 
     await message.answer("Выберите язык: 🇷🇺 Русский или 🇱🇻 Latviešu", reply_markup=kb)
     await state.set_state(Registration.choosing_language)
-
 
 # =================================
 # 3. PUNKT — показать баланс
@@ -227,20 +214,35 @@ async def command_davanas(message: Message):
 
     await message.answer(response)
 
-
-
 # --- HELP ---
 @router.message()
 async def send_help(message: Message):
     texts = get_texts(str(message.from_user.id))
     await message.answer(texts.messages["help"])
 
+# --- Регистрируем роутер ---
+dp.include_router(router)
 
-# --- MAIN ---
+# --- HTTP-сервер для Render ---
+async def http_handler(request):
+    return web.Response(text="OK")
+
+async def start_web():
+    app = web.Application()
+    app.router.add_get('/', http_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv('PORT', 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"HTTP-сервер запущен на порту {port}")
+
 async def main():
-    dp.include_router(router)
+    await start_web()
     await dp.start_polling(bot)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
+    import logging
+    from aiohttp import web
+    logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
